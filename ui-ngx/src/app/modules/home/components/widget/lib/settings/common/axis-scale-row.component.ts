@@ -98,8 +98,8 @@ export class AxisScaleRowComponent implements ControlValueAccessor, OnInit, Vali
       value: [null],
       entityAlias: [null]
     });
-    this.latestKeyFormControl = this.fb.control(null, [Validators.required]);
-    this.entityKeyFormControl = this.fb.control(null, [Validators.required]);
+    this.latestKeyFormControl = this.fb.control(null);
+    this.entityKeyFormControl = this.fb.control(null);
     merge(
       this.latestKeyFormControl.valueChanges,
       this.entityKeyFormControl.valueChanges,
