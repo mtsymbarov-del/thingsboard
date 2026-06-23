@@ -191,7 +191,7 @@ export const HelpLinks = {
     entitiesImport: `${helpBaseUrl}/docs${docPlatformPrefix}/user-guide/provisioning/#bulk-provisioning`,
     rulechains: `${helpBaseUrl}/docs${docPlatformPrefix}/user-guide/rule-engine/`,
     lwm2mResourceLibrary: `${helpBaseUrl}/docs${docPlatformPrefix}/reference/lwm2m-api/getting-started/`,
-    jsExtension: `${helpBaseUrl}/docs${docPlatformPrefix}/user-guide/contribution/ui/advanced-development`,
+    jsExtension: `${helpBaseUrl}/docs${docPlatformPrefix}/user-guide/contribution/widgets-development/advanced/`,
     dashboards: `${helpBaseUrl}/docs${docPlatformPrefix}/user-guide/dashboards/`,
     otaUpdates: `${helpBaseUrl}/docs${docPlatformPrefix}/user-guide/ota-updates/`,
     widgetTypes: `${helpBaseUrl}/docs${docPlatformPrefix}/user-guide/contribution/widgets-development/#widget-types`,
