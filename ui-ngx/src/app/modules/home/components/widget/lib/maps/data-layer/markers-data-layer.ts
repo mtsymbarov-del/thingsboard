@@ -444,12 +444,15 @@ class TbMarkerDataLayerItem extends TbLatestDataLayerItem<MarkersDataLayerSettin
       snapIgnore: !this.dataLayer.isSnappable(),
       bubblingMouseEvents: !this.dataLayer.isEditMode()
     });
-    if (this.lazyIconLoadEnabled()) {
+    if (this.clusterLazyLoadEnabled()) {
       this.onMarkerAdd = this.onMarkerAdded.bind(this);
       this.onMarkerRemove = this.onMarkerRemoved.bind(this);
       this.marker.on('add', this.onMarkerAdd);
       this.marker.on('remove', this.onMarkerRemove);
       this.applyDefaultMarkerIcon(data, dsData);
+    } else if (this.viewportLazyLoadEnabled()) {
+      this.applyDefaultMarkerIcon(data, dsData);
+      this.dataLayer.registerViewportLazyItem(this);
     } else {
       this.updateMarkerIcon(data, dsData);
     }
@@ -463,6 +466,7 @@ class TbMarkerDataLayerItem extends TbLatestDataLayerItem<MarkersDataLayerSettin
       this.marker.off('add', this.onMarkerAdd);
       this.marker.off('remove', this.onMarkerRemove);
     }
+    this.dataLayer.unregisterViewportLazyItem(this);
     super.remove();
   }
 
@@ -478,7 +482,7 @@ class TbMarkerDataLayerItem extends TbLatestDataLayerItem<MarkersDataLayerSettin
     this.marker.options.tbMarkerData = data;
     this.updateMarkerLocation(data, dsData);
     this.updateTooltip(data, dsData);
-    if (this.lazyIconLoadEnabled() && !this.individuallyVisible) {
+    if ((this.clusterLazyLoadEnabled() || this.viewportLazyLoadEnabled()) && !this.individuallyVisible) {
       this.iconLoaded = false;
       this.updateLabel(data, dsData);
     } else {
@@ -565,8 +569,17 @@ class TbMarkerDataLayerItem extends TbLatestDataLayerItem<MarkersDataLayerSettin
     }
   }
 
-  private lazyIconLoadEnabled(): boolean {
-    return !!this.settings.markerClustering?.enable && this.settings.markerType === MarkerType.image;
+
+  private imageMarkerType(): boolean {
+    return this.settings.markerType === MarkerType.image;
+  }
+
+  private clusterLazyLoadEnabled(): boolean {
+    return this.imageMarkerType() && !!this.settings.markerClustering?.enable;
+  }
+
+  private viewportLazyLoadEnabled(): boolean {
+    return this.imageMarkerType() && !this.settings.markerClustering?.enable;
   }
 
   private onMarkerAdded() {
@@ -579,6 +592,16 @@ class TbMarkerDataLayerItem extends TbLatestDataLayerItem<MarkersDataLayerSettin
           this.updateMarkerIcon(this.data, this.dataLayer.getMap().getData());
         }
       }, TbMarkerDataLayerItem.ICON_LOAD_DEBOUNCE_MS);
+    }
+  }
+
+  public checkViewportVisibility(bounds: L.LatLngBounds): void {
+    if (this.individuallyVisible || this.iconLoaded) {
+      return;
+    }
+    if (bounds.contains(this.marker.getLatLng())) {
+      this.individuallyVisible = true;
+      this.updateMarkerIcon(this.data, this.dataLayer.getMap().getData());
     }
   }
 
@@ -672,10 +695,29 @@ export class TbMarkersDataLayer extends TbLatestMapDataLayer<MarkersDataLayerSet
   private markersClusterContainer: L.MarkerClusterGroup;
   private clusterMarkerColorFunction: CompiledTbFunction<ClusterMarkerColorFunction>;
 
+  private readonly viewportLazyItems = new Set<TbMarkerDataLayerItem>();
+
   constructor(protected map: TbMap<any>,
               inputSettings: MarkersDataLayerSettings) {
     super(map, inputSettings);
   }
+
+  public registerViewportLazyItem(item: TbMarkerDataLayerItem): void {
+    this.viewportLazyItems.add(item);
+    item.checkViewportVisibility(this.map.getMap().getBounds());
+  }
+
+  public unregisterViewportLazyItem(item: TbMarkerDataLayerItem): void {
+    this.viewportLazyItems.delete(item);
+  }
+
+  private readonly onMapMoveEnd = (): void => {
+    if (!this.viewportLazyItems.size) {
+      return;
+    }
+    const bounds = this.map.getMap().getBounds();
+    this.viewportLazyItems.forEach(item => item.checkViewportVisibility(bounds));
+  };
 
   public dataLayerType(): MapDataLayerType {
     return 'markers';
@@ -758,6 +800,9 @@ export class TbMarkersDataLayer extends TbLatestMapDataLayer<MarkersDataLayerSet
           })
         )
       );
+    }
+    if (!this.settings.markerClustering?.enable) {
+      this.map.getMap().on('moveend', this.onMapMoveEnd);
     }
     return forkJoin(setup$).pipe(map(() => null));
   }
