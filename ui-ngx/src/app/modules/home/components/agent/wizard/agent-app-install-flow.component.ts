@@ -112,6 +112,10 @@ export class AgentAppInstallFlowComponent extends PageComponent implements OnIni
   useProfile = true;
   selectedProfile: AgentAppProfile | null = null;
   loadingProfiles = false;
+  hasCreatableTemplates = false;
+  typesWithoutTemplates = new Set<AgentApplicationType>();
+  // No templates and no existing profiles: nothing can be installed for the type.
+  unavailableTypes = new Set<AgentApplicationType>();
 
   profileSelectFormGroup: UntypedFormGroup;
   filteredProfiles: Observable<AgentAppProfile[]>;
@@ -217,10 +221,28 @@ export class AgentAppInstallFlowComponent extends PageComponent implements OnIni
         }
       });
     }
-    this.loader.prewarmTemplates(this.typeCards.map(card => card.type));
+    this.detectTypeAvailability();
     if (this.lockedType) {
       this.selectType(this.lockedType);
     }
+  }
+
+  private detectTypeAvailability() {
+    const types = this.typeCards.map(card => card.type);
+    forkJoin(types.map(type => forkJoin([
+      this.loader.loadTemplatesByType(type).pipe(catchError(() => of(null))),
+      this.loader.loadProfiles(type).pipe(catchError(() => of(null)))
+    ]))).subscribe(results => {
+      results.forEach(([templates, profiles], index) => {
+        if (templates && !this.edgeTemplateCompatibility.filterTemplates(templates).length) {
+          this.typesWithoutTemplates.add(types[index]);
+          if (profiles && !this.edgeTemplateCompatibility.filterProfiles(profiles).length) {
+            this.unavailableTypes.add(types[index]);
+          }
+        }
+      });
+      this.loader.prewarmTemplates(types);
+    });
   }
 
   selectType(type: AgentApplicationType) {
@@ -463,14 +485,17 @@ export class AgentAppInstallFlowComponent extends PageComponent implements OnIni
 
   private loadProfilesForType(type: AgentApplicationType) {
     this.loadingProfiles = true;
-    const templates$: Observable<AgentAppTemplate[]> = VIRTUAL_APP_TYPES.includes(type) && this.canCreateAppProfile
+    this.hasCreatableTemplates = false;
+    const templates$: Observable<AgentAppTemplate[]> = this.canCreateAppProfile
       ? this.loader.loadTemplatesByType(type).pipe(catchError(() => of([])))
       : of([]);
     forkJoin([this.loader.loadProfiles(type), templates$]).subscribe({
       next: ([allProfiles, allTemplates]) => {
         const profiles = this.edgeTemplateCompatibility.filterProfiles(allProfiles);
         const templates = this.edgeTemplateCompatibility.filterTemplates(allTemplates);
-        this.availableProfiles = [...profiles, ...buildVirtualAppProfiles(templates, allProfiles)];
+        this.hasCreatableTemplates = templates.length > 0;
+        const virtualProfiles = VIRTUAL_APP_TYPES.includes(type) ? buildVirtualAppProfiles(templates, allProfiles) : [];
+        this.availableProfiles = [...profiles, ...virtualProfiles];
         this.loadingProfiles = false;
         this.advanceFromTypeStep();
       },
@@ -482,6 +507,10 @@ export class AgentAppInstallFlowComponent extends PageComponent implements OnIni
   }
 
   private loadTemplateForType(type: AgentApplicationType) {
+    if (this.typesWithoutTemplates.has(type)) {
+      this.loadError = this.translate.instant('agent.app-no-templates');
+      return;
+    }
     this.loadingTemplate = true;
     this.loader.loadTemplate(type).subscribe({
       next: tpl => this.applyTemplate(tpl),

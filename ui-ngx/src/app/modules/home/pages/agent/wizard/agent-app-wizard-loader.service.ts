@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 import { Injectable } from '@angular/core';
 import { Observable, of, throwError } from 'rxjs';
-import { map, mergeMap, tap } from 'rxjs/operators';
+import { filter, map, mergeMap, shareReplay, tap } from 'rxjs/operators';
 import { AgentService } from '@core/http/agent.service';
 import { EntityId } from '@shared/models/id/entity-id';
 import {
@@ -40,7 +40,7 @@ export class AgentAppWizardLoaderService {
 
   private templateCache = new Map<AgentApplicationType, AgentAppTemplate>();
   private templateByVersionCache = new Map<string, AgentAppTemplate>();
-  private templatesByTypeCache = new Map<AgentApplicationType, AgentAppTemplate[]>();
+  private templatesByTypeCache = new Map<AgentApplicationType, Observable<AgentAppTemplate[]>>();
   private profilesCache = new Map<AgentApplicationType, AgentAppProfile[]>();
 
   constructor(private agentService: AgentService) {}
@@ -52,7 +52,10 @@ export class AgentAppWizardLoaderService {
       if (this.templateCache.has(type)) {
         return;
       }
-      this.agentService.getLatestAgentAppTemplate(type, AgentAppConfigType.DOCKER_COMPOSE).subscribe({
+      this.loadTemplatesByType(type).pipe(
+        filter(templates => templates.length > 0),
+        mergeMap(() => this.agentService.getLatestAgentAppTemplate(type, AgentAppConfigType.DOCKER_COMPOSE))
+      ).subscribe({
         next: tpl => this.templateCache.set(type, tpl),
         error: () => { /* swallow — loadTemplate retries on demand */ }
       });
@@ -81,14 +84,15 @@ export class AgentAppWizardLoaderService {
     );
   }
 
+  // Caches the request itself, so concurrent callers share one in-flight call;
+  // shareReplay drops a failed request, so the next caller retries.
   loadTemplatesByType(type: AgentApplicationType): Observable<AgentAppTemplate[]> {
-    const cached = this.templatesByTypeCache.get(type);
-    if (cached) {
-      return of(cached);
+    let templates$ = this.templatesByTypeCache.get(type);
+    if (!templates$) {
+      templates$ = this.agentService.getAgentAppTemplatesByAppType(type).pipe(shareReplay(1));
+      this.templatesByTypeCache.set(type, templates$);
     }
-    return this.agentService.getAgentAppTemplatesByAppType(type).pipe(
-      tap(templates => this.templatesByTypeCache.set(type, templates))
-    );
+    return templates$;
   }
 
   materializeProfile(profile: VirtualAgentAppProfile): Observable<AgentAppProfile> {

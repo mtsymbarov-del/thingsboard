@@ -91,11 +91,12 @@
             @for (card of typeCards; track card.type) {
               <button type="button" class="type-card"
                 [class.selected]="selectedType === card.type"
+                [disabled]="unavailableTypes.has(card.type)"
                 [attr.aria-pressed]="selectedType === card.type"
                 (click)="selectType(card.type)">
                 <mat-icon>{{ card.icon }}</mat-icon>
                 <h4>{{ card.labelKey | translate }}</h4>
-                <p>{{ card.descKey | translate }}</p>
+                <p>{{ (unavailableTypes.has(card.type) ? 'agent.app-type-unavailable' : card.descKey) | translate }}</p>
               </button>
             }
           </div>
@@ -147,6 +148,12 @@
             (relatedEntityNameChange)="onRelatedEntityName($event)">
           </tb-agent-related-entity-autocomplete>
         }
+        @if (useProfile && typesWithoutTemplates.has(selectedType)) {
+          <div class="tb-app-compose-hint">
+            <mat-icon class="tb-app-compose-hint-icon">warning_amber</mat-icon>
+            <span translate>agent.app-no-templates</span>
+          </div>
+        }
         @if (useProfile) {
           <mat-form-field class="mat-block" appearance="outline" [formGroup]="profileSelectFormGroup">
             <mat-label translate>agent.app-install-select-profile</mat-label>
@@ -161,7 +168,7 @@
                 <mat-icon class="material-icons">close</mat-icon>
               </button>
             }
-            @if (!profileSelectFormGroup.get('profile').value && canCreateAppProfile) {
+            @if (!profileSelectFormGroup.get('profile').value && canCreateAppProfile && hasCreatableTemplates) {
               <button
                 mat-button color="primary" matSuffix type="button"
                 (mousedown)="$event.preventDefault()"

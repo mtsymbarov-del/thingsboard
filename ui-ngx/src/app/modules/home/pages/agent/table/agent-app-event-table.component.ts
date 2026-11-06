@@ -14,9 +14,10 @@ import { AgentAppEventTableConfig } from './agent-app-event-table-config';
 
 @Component({
   selector: 'tb-agent-app-event-table',
-  template: '<tb-entities-table [entitiesTableConfig]="tableConfig"></tb-entities-table>',
+  template: '<tb-entities-table class="white-background" [entitiesTableConfig]="tableConfig"></tb-entities-table>',
   styles: [`
     :host { display: block; height: 100%; }
+    .white-background { --mat-sidenav-content-background-color: white; }
     :host ::ng-deep mat-row:has(.tb-agent-app-event-inflight) {
       background-color: #fff8e1;
       cursor: pointer;

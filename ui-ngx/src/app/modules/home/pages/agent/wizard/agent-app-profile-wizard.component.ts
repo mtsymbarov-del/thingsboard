@@ -32,6 +32,7 @@ import {
 } from '@home/pages/agent/util/agent-compose-yaml';
 import { orderTemplatesNewestFirst } from '@home/pages/agent/util/template-version-order';
 import { EdgeTemplateCompatibilityService } from '@home/pages/agent/util/edge-template-compatibility.service';
+import { AgentAppWizardLoaderService } from '@home/pages/agent/wizard/agent-app-wizard-loader.service';
 
 export interface AgentAppProfileWizardData {
   profile?: AgentAppProfile;
@@ -50,6 +51,7 @@ interface TypeCard {
   selector: 'tb-agent-app-profile-wizard',
   templateUrl: './agent-app-profile-wizard.component.html',
   styleUrls: ['./agent-app-profile-wizard.component.scss'],
+  providers: [AgentAppWizardLoaderService],
   standalone: false
 })
 export class AgentAppProfileWizardComponent
@@ -78,7 +80,6 @@ export class AgentAppProfileWizardComponent
   availableTemplates: AgentAppTemplate[] = [];
   selectedTemplateVersion: string | null = null;
   loadingTemplates = false;
-  private templatesByTypeCache = new Map<AgentApplicationType, AgentAppTemplate[]>();
 
   profileForm: UntypedFormGroup;
   composeYaml = '';
@@ -109,6 +110,7 @@ export class AgentAppProfileWizardComponent
               protected router: Router,
               protected translate: TranslateService,
               private agentService: AgentService,
+              private loader: AgentAppWizardLoaderService,
               private breakpointObserver: BreakpointObserver,
               private edgeTemplateCompatibility: EdgeTemplateCompatibilityService,
               private fb: UntypedFormBuilder,
@@ -128,10 +130,7 @@ export class AgentAppProfileWizardComponent
   ngOnInit() {
     // Prefetch templates for all types so type selection is instant.
     this.typeCards.forEach(card => {
-      this.agentService.getAgentAppTemplatesByAppType(card.type).subscribe({
-        next: templates => this.templatesByTypeCache.set(card.type, templates),
-        error: () => {}
-      });
+      this.loader.loadTemplatesByType(card.type).subscribe({ error: () => {} });
     });
     if (this.editMode) {
       this.initForEdit(this.data.profile);
@@ -200,17 +199,11 @@ export class AgentAppProfileWizardComponent
     this.loadTemplatesForType(type);
   }
 
+  // A finished request replays synchronously, so a prefetched type shows no loading state.
   private loadTemplatesForType(type: AgentApplicationType) {
-    const cached = this.templatesByTypeCache.get(type);
-    if (cached) {
-      this.availableTemplates = orderTemplatesNewestFirst(this.supportedTemplates(cached));
-      this.selectLatestTemplate();
-      return;
-    }
     this.loadingTemplates = true;
-    this.agentService.getAgentAppTemplatesByAppType(type).subscribe({
+    this.loader.loadTemplatesByType(type).subscribe({
       next: templates => {
-        this.templatesByTypeCache.set(type, templates);
         this.availableTemplates = orderTemplatesNewestFirst(this.supportedTemplates(templates));
         this.loadingTemplates = false;
         this.selectLatestTemplate();
